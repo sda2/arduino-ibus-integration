@@ -2,35 +2,35 @@
 // Robin Liebl / sda2 for e46fanatics.de
 // Feel free to use, edit and optimize this code!
    
-// This sketch interprets the I-bus signals via a MCP2025 LIN bus receiver module.
+// This sketch interprets the I-Bus signals via a MCP2025 LIN bus receiver module.
 // Depending on the pressed button on the steering wheel, the output is either an HID command to the USB port,
 // or a signal to the steering wheel remote input of the Alpine headunit.
 
 /* Possible buttons on the steering wheel and their function:
-// 	LEFT PLUS	Alpine volume increase
-// 	LEFT MINUS	Alpine volume decrease
-// 	LEFT UP		HID next track
-// 	LEFT DOWN	HID previous track
-// 	LEFT R/T	HID tabulator
-// 	LEFT VOICE	Alpine volume mute
-// 	RIGHT PLUS	-
-// 	RIGHT MINUS	-
-// 	RIGHT SET	-
-// 	RIGHT I/O	-
+	LEFT PLUS	Alpine volume increase
+	LEFT MINUS	Alpine volume decrease
+	LEFT UP		HID next track
+	LEFT DOWN	HID previous track
+	LEFT R/T	HID tabulator
+	LEFT VOICE	Alpine volume mute
+	RIGHT PLUS	-
+	RIGHT MINUS	-
+	RIGHT SET	-
+	RIGHT I/O	-
 */
 
-/*Alpine remote control protocol:
-	Volume Up	11010111 11011011 10101011 11011011 11010110 11010101 -> 
- 	Volume Down	11010111 11011011 10101011 01101101 11110110 11010101 -> 
-	Mute        11010111 11011011 10101011 10101101 11101110 11010101 -> 
-	Preset Up   11010111 11011011 10101011 10101011 11101111 01010101 -> 
-	Preset Down	11010111 11011011 10101011 01010101 11111111 01010101 -> 
- 	Source      11010111 11011011 10101011 10110111 11011011 01010101 -> 
- 	Next Track	11010111 11011011 10101011 10111011 11011010 11010101 -> 
- 	Prev. Track 11010111 11011011 10101011 01011101 11111010 11010101 -> 
- 	Power	    11010111 11011011 10101011 01110111 11101011 01010101 -> 
- 	Enter/Play	11010111 11011011 10101011 01010111 11111101 01010101 -> 
- 	Band/Prog	11010111 11011011 10101011 01101011 11110111 01010101 -> 
+/* Alpine remote control protocol:
+	Volume Up	11010111 11011011 10101011 11011011 11010110 11010101
+ 	Volume Down	11010111 11011011 10101011 01101101 11110110 11010101
+	Mute        11010111 11011011 10101011 10101101 11101110 11010101
+	Preset Up   11010111 11011011 10101011 10101011 11101111 01010101
+	Preset Down	11010111 11011011 10101011 01010101 11111111 01010101
+ 	Source      11010111 11011011 10101011 10110111 11011011 01010101
+ 	Next Track	11010111 11011011 10101011 10111011 11011010 11010101
+ 	Prev. Track 11010111 11011011 10101011 01011101 11111010 11010101
+ 	Power	    11010111 11011011 10101011 01110111 11101011 01010101
+ 	Enter/Play	11010111 11011011 10101011 01010111 11111101 01010101
+ 	Band/Prog	11010111 11011011 10101011 01101011 11110111 01010101
 	
 	bool aAlpVolUp[24]    = {1,1,0,1,0,1,1,1,1,1,0,1,1,0,1,1,1,0,1,0,1,0,1,1,1,1,0,1,1,0,1,1,1,1,0,1,0,1,1,0,1,1,0,1,0,1,0,1};
 	bool aAlpVolDn[24]    = {1,1,0,1,0,1,1,1,1,1,0,1,1,0,1,1,1,0,1,0,1,0,1,1,0,1,1,0,1,1,0,1,1,1,1,1,0,1,1,0,1,1,0,1,0,1,0,1};
@@ -44,16 +44,17 @@
 	bool aAlpEntPlay[24]  = {1,1,0,1,0,1,1,1,1,1,0,1,1,0,1,1,1,0,1,0,1,0,1,1,0,1,0,1,0,1,1,1,1,1,1,1,1,1,0,1,0,1,0,1,0,1,0,1};
 	bool aAlpBndPrg[24]   = {1,1,0,1,0,1,1,1,1,1,0,1,1,0,1,1,1,0,1,0,1,0,1,1,0,1,1,0,1,0,1,1,1,1,1,1,0,1,1,1,0,1,0,1,0,1,0,1};
 	
-	Write to Alpine bus with alpineBusWrite(Array-Name)
+	Write to Alpine bus with alpineCtrl(Array-Name)
 */
 
 #include "SoftwareSerial.h"
 
-#define mcpTxPin 4  // tx pin not used, defined for coding only
-#define mcpRxPin 6  // rx pin for the reciever to be plugged into
-#define alpinePin 8 // alpine remote control pin to be connect to the tip of the lead that is plugged into headunit
+#define mcpCsPin 2  // cable select pin connected to mcp2025_pin2 - must be pulled high for "OP mode" to send data
+#define mcpRxPin 5  // transmit pin connected to mcp2025_pin5
+#define mcpTxPin 6  // receive pin connected to mcp2025_pin6
+#define alpinePin 8 // alpine rc output pin connected to the tip of the TRS connector that is plugged into headunit
 
-// set up a new serial connection for communicating with MCP2025 
+// Set up a software serial connection for communicating with MCP2025
 // this also frees up Arduino's built in serial port for acting as an HID keyboard
 
 SoftwareSerial mcpSerial =  SoftwareSerial(mcpRxPin, mcpTxPin);
