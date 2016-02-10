@@ -47,28 +47,28 @@
 	Write to Alpine bus with alpineCtrl(Array-Name)
 */
 
-#include "SoftwareSerial.h"
-
+//#include "SoftwareSerial.h"
+#define ibus Serial1
 #define pMcpWake 2  // cable select pin connected to mcp2025_pin2 - must be pulled high for "OP mode" to send data
-#define pMcpRx 5  // transmit pin connected to mcp2025_pin5
-#define pMcpTx 6  // receive pin connected to mcp2025_pin6
+//#define pMcpRx 5  // transmit pin connected to mcp2025_pin5
+//#define pMcpTx 6  // receive pin connected to mcp2025_pin6
 #define pAlpineRemote 8 // alpine rc output pin connected to the tip of the TRS connector that is plugged into headunit
 
 // Setup a software serial connection for communicating with MCP2025
 // this also frees up Arduino's built in serial port for acting as an HID multimedia keyboard
 
-SoftwareSerial mcpSerial =  SoftwareSerial(pMcpRx, pMcpTx);
+//SoftwareSerial mcpSerial =  SoftwareSerial(pMcpRx, pMcpTx);
 
 void setup(){  
 	// setup the input and output pins
 	pinMode(pMcpWake, OUTPUT);
-	pinMode(pMcpRx, INPUT);
-	pinMode(pMcpTx, OUTPUT);
+	//pinMode(pMcpRx, INPUT);
+	//pinMode(pMcpTx, OUTPUT);
 	pinMode(pAlpineRemote, OUTPUT);
 	  
 	// setup serial ports
-	mcpSerial.begin(9600, SERIAL_8E1); // begin serial connection with MCP2025 transceiver
-	Serial.begin(9600);	 // begin serial connection over USB to the computer
+	//mcpSerial.begin(9600); // begin serial connection with MCP2025 transceiver
+	ibus.begin(9600, SERIAL_8E1);	 // begin serial connection over USB to the computer
 	
 	// pull CS/LWAKE pin low
 	digitalWrite(pMcpWake, LOW);
@@ -85,6 +85,13 @@ void setup(){
 	bool aAlpPower[48]	= {1,1,0,1,0,1,1,1,1,1,0,1,1,0,1,1,1,0,1,0,1,0,1,1,0,1,1,1,0,1,1,1,1,1,1,0,1,0,1,1,0,1,0,1,0,1,0,1};
 	bool aAlpEntPlay[48]= {1,1,0,1,0,1,1,1,1,1,0,1,1,0,1,1,1,0,1,0,1,0,1,1,0,1,0,1,0,1,1,1,1,1,1,1,1,1,0,1,0,1,0,1,0,1,0,1};
 	bool aAlpBndPrg[48]	= {1,1,0,1,0,1,1,1,1,1,0,1,1,0,1,1,1,0,1,0,1,0,1,1,0,1,1,0,1,0,1,1,1,1,1,1,0,1,1,1,0,1,0,1,0,1,0,1};
+	
+	// setup I-Bus message bytes
+	byte bMflVolUp [6]	= {0x50,0x04,0x68,0x32,0x11,0x1F}; // steering wheel volume up
+	byte bMflVolDn [6]	= {0x50,0x04,0x68,0x32,0x10,0x1E}; // steering wheel volume down
+	byte bMflTrkPrv [6] = {0x50,0x04,0x68,0x3B,0x08,0x0F}; // steering wheel previous track
+	byte bMflTrkNxt [6] = {0x50,0x04,0x68,0x3B,0x01,0x06}; // steering wheel next track
+	byte bMflRt [6] 	= {0x50,0x03,0xC8,0x01,0x9A}; // steering wheel R/T
 }
 
 
