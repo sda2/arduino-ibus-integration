@@ -11,7 +11,7 @@
 	LEFT MINUS	Alpine volume decrease
 	LEFT UP		HID next track
 	LEFT DOWN	HID previous track
-	LEFT R/T	HID tabulator
+	LEFT R/T	HID play/pause
 	LEFT VOICE	Alpine volume mute
 	RIGHT PLUS	-
 	RIGHT MINUS	-
@@ -49,558 +49,88 @@
 
 #include "SoftwareSerial.h"
 
-#define mcpCsPin 2  // cable select pin connected to mcp2025_pin2 - must be pulled high for "OP mode" to send data
-#define mcpRxPin 5  // transmit pin connected to mcp2025_pin5
-#define mcpTxPin 6  // receive pin connected to mcp2025_pin6
-#define alpinePin 8 // alpine rc output pin connected to the tip of the TRS connector that is plugged into headunit
+#define pMcpWake 2  // cable select pin connected to mcp2025_pin2 - must be pulled high for "OP mode" to send data
+#define pMcpRx 5  // transmit pin connected to mcp2025_pin5
+#define pMcpTx 6  // receive pin connected to mcp2025_pin6
+#define pAlpineRemote 8 // alpine rc output pin connected to the tip of the TRS connector that is plugged into headunit
 
-// Set up a software serial connection for communicating with MCP2025
-// this also frees up Arduino's built in serial port for acting as an HID keyboard
+// Setup a software serial connection for communicating with MCP2025
+// this also frees up Arduino's built in serial port for acting as an HID multimedia keyboard
 
-SoftwareSerial mcpSerial =  SoftwareSerial(mcpRxPin, mcpTxPin);
+SoftwareSerial mcpSerial =  SoftwareSerial(pMcpRx, pMcpTx);
 
 void setup(){  
-	// set up the input and output pins
-	pinMode(mcpRxPin, INPUT);
-	pinMode(mcpTxPin, OUTPUT);
-	pinMode(alpinePin, OUTPUT);
+	// setup the input and output pins
+	pinMode(pMcpWake, OUTPUT);
+	pinMode(pMcpRx, INPUT);
+	pinMode(pMcpTx, OUTPUT);
+	pinMode(pAlpineRemote, OUTPUT);
 	  
-	// set up serial ports
-	mcpSerial.begin(9600); // begin serial connection with MCP2025 receiver
+	// setup serial ports
+	mcpSerial.begin(9600, SERIAL_8E1); // begin serial connection with MCP2025 transceiver
 	Serial.begin(9600);	 // begin serial connection over USB to the computer
+	
+	// pull CS/LWAKE pin low
+	digitalWrite(pMcpWake, LOW);
+	
+	// setup Alpine remote control codes
+	bool aAlpVolUp[48]	= {1,1,0,1,0,1,1,1,1,1,0,1,1,0,1,1,1,0,1,0,1,0,1,1,1,1,0,1,1,0,1,1,1,1,0,1,0,1,1,0,1,1,0,1,0,1,0,1};
+	bool aAlpVolDn[48]	= {1,1,0,1,0,1,1,1,1,1,0,1,1,0,1,1,1,0,1,0,1,0,1,1,0,1,1,0,1,1,0,1,1,1,1,1,0,1,1,0,1,1,0,1,0,1,0,1};
+	bool aAlpMute[48]	= {1,1,0,1,0,1,1,1,1,1,0,1,1,0,1,1,1,0,1,0,1,0,1,1,1,0,1,0,1,1,0,1,1,1,1,0,1,1,1,0,1,1,0,1,0,1,0,1};
+	bool aAlpPrstUp[48]	= {1,1,0,1,0,1,1,1,1,1,0,1,1,0,1,1,1,0,1,0,1,0,1,1,1,0,1,0,1,0,1,1,1,1,1,0,1,1,1,1,0,1,0,1,0,1,0,1};
+	bool aAlpPrstDn[48]	= {1,1,0,1,0,1,1,1,1,1,0,1,1,0,1,1,1,0,1,0,1,0,1,1,0,1,0,1,0,1,0,1,1,1,1,1,1,1,1,1,0,1,0,1,0,1,0,1};
+	bool aAlpSource[48]	= {1,1,0,1,0,1,1,1,1,1,0,1,1,0,1,1,1,0,1,0,1,0,1,1,1,0,1,1,0,1,1,1,1,1,0,1,1,0,1,1,0,1,0,1,0,1,0,1};
+	bool aAlpTrckUp[48]	= {1,1,0,1,0,1,1,1,1,1,0,1,1,0,1,1,1,0,1,0,1,0,1,1,1,0,1,1,1,0,1,1,1,1,0,1,1,0,1,0,1,1,0,1,0,1,0,1};
+	bool aAlpTrckDn[48]	= {1,1,0,1,0,1,1,1,1,1,0,1,1,0,1,1,1,0,1,0,1,0,1,1,0,1,0,1,1,1,0,1,1,1,1,1,1,0,1,0,1,1,0,1,0,1,0,1};
+	bool aAlpPower[48]	= {1,1,0,1,0,1,1,1,1,1,0,1,1,0,1,1,1,0,1,0,1,0,1,1,0,1,1,1,0,1,1,1,1,1,1,0,1,0,1,1,0,1,0,1,0,1,0,1};
+	bool aAlpEntPlay[48]= {1,1,0,1,0,1,1,1,1,1,0,1,1,0,1,1,1,0,1,0,1,0,1,1,0,1,0,1,0,1,1,1,1,1,1,1,1,1,0,1,0,1,0,1,0,1,0,1};
+	bool aAlpBndPrg[48]	= {1,1,0,1,0,1,1,1,1,1,0,1,1,0,1,1,1,0,1,0,1,0,1,1,0,1,1,0,1,0,1,1,1,1,1,1,0,1,1,1,0,1,0,1,0,1,0,1};
 }
 
 
 void loop(){
-
+	// read I-Bus
 	
-	/*
-	int code = '0'; // sets up an integer to store received code until it is processed
-	START:
-	code = mcpSerial.read();
-	if (code == 01) {goto START;}
-	if (code == 99) {alpineMute();}
-	if (code == 98) {alpineVolUp();}
-	if (code == 97) {alpineVolDown();}
-	if (code == 96) {alpineSource();}
-	else {goto START;}
-	*/
+	// switch / case based on I-Bus message 
+	
+	// loop that bitch
+	
 }
   
-void usbNextTrack(){
+void fUsbHidPlayPause(){
+	Remote.play();  // send play/pause command
+	Remote.clear(); // Prevent duplicate activation
+}
+  
+void fUsbHidNextTrack(){
 	Remote.next();  // send next track command
 	Remote.clear(); // Prevent duplicate activation
 }
 
-void usbPrevTrack(){
+void fUsbHidPrevTrack(){
 	Remote.previous();  // send previous track command
 	Remote.clear(); 	// Prevent duplicate activation
 }
 
-void alpineBusInit(){
-	//send start command
-	
-	digitalWrite(alpinePin, HIGH);	// send 8.0ms high
+void fAlpineCtrl(bool aAlpineCode[48]){
+	// initialize the Alpine 1-wire bus with 8.0ms high and 4.5ms low
+	// output the 6 command bytes over the defined Arduino pin
+	// first iterate through the array bit mask
+	// if bitwise AND resolves to true  -> output 1 (0.5ms high, 0.5ms low)
+	// if bitwise AND resolves to false -> output 0 (1.0ms low)
+	digitalWrite(pAlpineRemote, HIGH);
 	delayMicroseconds(8000);
-	digitalWrite(alpinePin, LOW);	// send 4.5ms low
+	digitalWrite(pAlpineRemote, LOW);
 	delayMicroseconds(4500);
-}
-
-void alpineBusWrite(bool output[24]){
-	
-	
-	
-	
-	digitalWrite(alpinePin, HIGH); //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);  //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	delayMicroseconds(1000);       //   0 leave the pin low for 1000 micro seconds
-}
-
-void alpineBusExit(){
-	// send end command 
-	// end command binary 1010101
-
-	digitalWrite(alpinePin, HIGH);
-	delayMicroseconds(500);
-	digitalWrite(alpinePin, LOW);
-	delayMicroseconds(500);
-
-	delayMicroseconds(1000);
-
-	digitalWrite(alpinePin, HIGH);
-	delayMicroseconds(500);
-	digitalWrite(alpinePin, LOW);
-	delayMicroseconds(500);
-
-	delayMicroseconds(1000);
-
-	digitalWrite(alpinePin, HIGH);
-	delayMicroseconds(500);
-	digitalWrite(alpinePin, LOW);
-	delayMicroseconds(500);
-
-	delayMicroseconds(1000);
-
-	digitalWrite(alpinePin, HIGH);
-	delayMicroseconds(500);
-	digitalWrite(alpinePin, LOW);
-	delayMicroseconds(500);
-}
-
-void alpineMute(){
- 	// send mute command
-	// binary for the mute command  1 0 1 0 1 1 0 1 1 1 1 0 1 1 1 0 1
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	delayMicroseconds(1000);       //   0 leave the pin low for 100 micro seconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	delayMicroseconds(1000);       //   0 leave the pin low for 100 micro seconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	delayMicroseconds(1000);       //   0 leave the pin low for 100 micro seconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	delayMicroseconds(1000);       //   0 leave the pin low for 100 micro seconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	delayMicroseconds(1000);       //   0 leave the pin low for 100 micro seconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	// MUTE COMMAND SENT
-
-	//SEND END COMMAND
-	//end command binary 1010101
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	delayMicroseconds(1000);       //   0 leave the pin low for 100 micro seconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	delayMicroseconds(1000);       //   0 leave the pin low for 100 micro seconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	delayMicroseconds(1000);       //   0 leave the pin low for 100 micro seconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	//END COMMAND SENT
-
-	loop ();//COMMAND SENT TO HEADUNIT GO TO START TO LISTEN FOR FURTHER BUTTON PRESSED COMMANDS
-}
-
-void alpineVolUp(){
-	//send start command
-	//first send 8ms high
-	digitalWrite(alpinePin, HIGH);
-	delay(8);
-	// send 4.5ms low
-	digitalWrite(alpinePin, LOW);
-	delayMicroseconds(4500);
-	//start command sent
-
-	//send volume up command
-	//binary for volume up 11011011110101101
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	delayMicroseconds(1000);       //   0 leave the pin low for 100 micro seconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	delayMicroseconds(1000);       //   0 leave the pin low for 100 micro seconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	delayMicroseconds(1000);       //   0 leave the pin low for 100 micro seconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	delayMicroseconds(1000);       //   0 leave the pin low for 100 micro seconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	delayMicroseconds(1000);       //   0 leave the pin low for 100 micro seconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	// volume up command send
-
-	//SEND END COMMAND
-	//end command binary 1010101
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	delayMicroseconds(1000);       //   0 leave the pin low for 100 micro seconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	delayMicroseconds(1000);       //   0 leave the pin low for 100 micro seconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	delayMicroseconds(1000);       //   0 leave the pin low for 100 micro seconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	//END COMMAND SENT
-	loop ();//COMMAND SENT TO HEADUNIT GO TO LOOP TO LISTEN FOR FURTHER BUTTON PRESSED COMMANDS
-}
-
-void alpineVolDown(){
-	//send start command
-	//first send 8ms high
-	digitalWrite(alpinePin, HIGH);
-	delay(8);
-	// send 4.5ms low
-	digitalWrite(alpinePin, LOW);
-	delayMicroseconds(4500);
-	//start command sent
-
-	//send volume down command
-	//binary for volume down 0 1 1 0 1 1 0 1 1 1 1 1 0 1 1 0 1
-
-	delayMicroseconds(1000);       //   0 leave the pin low for 100 micro seconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	delayMicroseconds(1000);       //   0 leave the pin low for 100 micro seconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	delayMicroseconds(1000);       //   0 leave the pin low for 100 micro seconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	delayMicroseconds(1000);       //   0 leave the pin low for 100 micro seconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	delayMicroseconds(1000);       //   0 leave the pin low for 100 micro seconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	//volume down command sent
-	//SEND END COMMAND
-	//end command binary 1010101
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	delayMicroseconds(1000);       //   0 leave the pin low for 100 micro seconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	delayMicroseconds(1000);       //   0 leave the pin low for 100 micro seconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	delayMicroseconds(1000);       //   0 leave the pin low for 100 micro seconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	//END COMMAND SENT
-	loop() ;//COMMAND SENT TO HEADUNIT GO TO START TO LISTEN FOR FURTHER BUTTON PRESSED COMMANDS
-}
-
-void alpineSource(){
-	//send start command
-	//first send 8ms high
-	digitalWrite(alpinePin, HIGH);
-	delay(8);
-	// send 4.5ms low
-	digitalWrite(alpinePin, LOW);
-	delayMicroseconds(4500);
-	//start command sent
-
-	//send source command
-	//source command binary 1 0 1 1 0 1 1 1  1 1 0 1 1 0 1 1 0
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	delayMicroseconds(1000);       //   0 leave the pin low for 100 micro seconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	delayMicroseconds(1000);       //   0 leave the pin low for 100 micro seconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	delayMicroseconds(1000);       //   0 leave the pin low for 100 micro seconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	delayMicroseconds(1000);       //   0 leave the pin low for 100 micro seconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	delayMicroseconds(1000);       //   0 leave the pin low for 100 micro seconds
-	//source command sent
-
-	//SEND END COMMAND
-	//end command binary 1010101
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	delayMicroseconds(1000);       //   0 leave the pin low for 100 micro seconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	delayMicroseconds(1000);       //   0 leave the pin low for 100 micro seconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-
-	delayMicroseconds(1000);       //   0 leave the pin low for 100 micro seconds
-
-	digitalWrite(alpinePin, HIGH);     //   1   sending high 
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	digitalWrite(alpinePin, LOW);      //   1   sending low
-	delayMicroseconds(500);        //   1   for 500 microseconds
-	//END COMMAND SENT
-	loop ();//COMMAND SENT TO HEADUNIT GO TO START TO LISTEN FOR FURTHER BUTTON PRESSED COMMANDS
+	for (int i = 0; i < 48; i++){
+		if (aAlpineCode[i] == 1){
+			digitalWrite(pAlpineRemote,HIGH);
+			delayMicroseconds(500);
+			digitalWrite(pAlpineRemote,LOW);
+			delayMicroseconds(500);
+		}
+		else { 						
+			delayMicroseconds(1000);
+		}
+	}
 }

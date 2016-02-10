@@ -26,12 +26,6 @@ void setup(){
 void loop(){
 	if (Serial.available() > 0) {
 		int inByte = Serial.read();
-		// do something different depending on the character received.
-		// The switch statement expects single number values for each case;
-		// in this exmaple, though, you're using single quotes to tell
-		// the controller to get the ASCII value for the character.  For
-		// example 'a' = 97, 'b' = 98, and so forth:
-
 		switch (inByte){
 			case 'a':
 				fAlpineCtrl(aAlpVolUp);
@@ -68,6 +62,7 @@ void loop(){
 				break;
 		}
 	}
+}
 
 void fAlpineCtrl(bool aAlpineCode[48]){
 	// initialize the Alpine 1-wire bus with 8.0ms high and 4.5ms low
